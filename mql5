@@ -1,0 +1,115 @@
+
+//+------------------------------------------------------------------+
+//|                    Legend Of Legends                             |
+//|                Developer's Site: forexroboteasy.com             |
+//|               Development by: Forex Robot Easy Team              |
+//+------------------------------------------------------------------+
+
+//--- Include necessary libraries
+#include <Trade\Trade.mqh>
+#include <Renko\Renko.mqh>
+
+//--- Global variables
+CTrade trade; // instance of CTrade class
+
+//--- Indicator input parameters
+input int indicatorPeriod = 96; // number of candlesticks for indicator calculation
+
+//--- Expert Advisor input parameters
+input bool useGridStrategy = true; // enable grid strategy
+input bool useMartingaleStrategy = true; // enable martingale strategy
+input int gridStep = 10; // grid step size
+input double lotSize = 0.01; // initial lot size
+input double martingaleMultiplier = 2.0; // multiplier for martingale strategy
+
+//--- Indicator objects
+CRenko renko; // instance of CRenko class
+double renkoHigh[]; // array to store renko high values
+double renkoLow[]; // array to store renko low values
+
+//+------------------------------------------------------------------+
+//| Expert Advisor initialization function                           |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   //--- Initialize indicator
+   renko.Create(IndicatorShortName(), indicatorPeriod);
+   
+   //--- Initialize indicator arrays
+   ArrayResize(renkoHigh, indicatorPeriod);
+   ArrayResize(renkoLow, indicatorPeriod);
+   
+   //--- Set default settings for EA
+   trade.SetExpertMagicNumber(Symbol(), 123456); // set magic number
+   trade.SetSlippage(10); // set slippage
+   
+   //--- Set default settings for grid and martingale strategy
+   if(useGridStrategy)
+   {
+      trade.SetDeviationInPoints(50); // set deviation for pending orders
+      trade.SetUseStopLoss(true); // enable stop loss
+   }
+   
+   if(useMartingaleStrategy)
+   {
+      trade.SetMaxLots(10); // set maximum lot size for martingale
+   }
+   
+   //--- Return initialization result
+   return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert Advisor start function                                     |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   //--- Check if indicator is calculated
+   if(renko.IndicatorCounted() < indicatorPeriod)
+      return;
+   
+   //--- Get indicator values
+   ArrayCopy(renko.High(), renkoHigh, 0, indicatorPeriod);
+   ArrayCopy(renko.Low(), renkoLow, 0, indicatorPeriod);
+   
+   //--- Perform market analysis and generate trading signals
+   for(int i = 0; i < indicatorPeriod; i++)
+   {
+      //--- Enter the market within the channel if conditions are met
+      if(renkoHigh[i] > renkoHigh[i+1] && renkoLow[i] < renkoLow[i+1])
+      {
+         //--- Enter Buy trade
+         if(useGridStrategy)
+            trade.BuyGrid(Symbol(), lotSize, renkoLow[i], gridStep);
+         else
+            trade.Buy(Symbol(), lotSize, renkoLow[i], 0, 0);
+         
+         //--- Increase lot size for martingale strategy
+         if(useMartingaleStrategy)
+            lotSize *= martingaleMultiplier;
+      }
+      
+      //--- Enter the market within the channel if conditions are met
+      if(renkoLow[i] < renkoLow[i+1] && renkoHigh[i] > renkoHigh[i+1])
+      {
+         //--- Enter Sell trade
+         if(useGridStrategy)
+            trade.SellGrid(Symbol(), lotSize, renkoHigh[i], gridStep);
+         else
+            trade.Sell(Symbol(), lotSize, renkoHigh[i], 0, 0);
+         
+         //--- Increase lot size for martingale strategy
+         if(useMartingaleStrategy)
+            lotSize *= martingaleMultiplier;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Expert Advisor deinitialization function                         |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   //--- Close any open trades
+   trade.CloseAll();
+}
